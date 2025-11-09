@@ -904,92 +904,14 @@ from comdirect_client.exceptions import (
 
 ```
 ComdirectAPIError (base)
-├── AuthenticationError       # 401 Unauthorized
-├── ValidationError           # 422 Unprocessable Entity
-├── ServerError               # 500 Internal Server Error
-├── AccountNotFoundError      # 404 Not Found
+├── AuthenticationError       
+├── ValidationError          
+├── ServerError             
+├── AccountNotFoundError   
 ├── TANTimeoutError
 ├── SessionActivationError
 ├── TokenExpiredError
 └── NetworkTimeoutError
-```
-
-### Error Handling Example
-
-```python
-import asyncio
-from comdirect_client.client import ComdirectClient
-from comdirect_client.exceptions import (
-    AuthenticationError,
-    ValidationError,
-    ServerError,
-    TANTimeoutError,
-    TokenExpiredError,
-    AccountNotFoundError,
-    NetworkTimeoutError,
-)
-
-
-async def main():
-    client = ComdirectClient(...)
-    
-    try:
-        # Authenticate
-        await client.authenticate()
-        
-    except AuthenticationError as e:
-        print(f"Invalid credentials: {e}")
-        # Check username/password, client_id/client_secret
-        
-    except TANTimeoutError as e:
-        print(f"TAN approval timeout: {e}")
-        # User didn't approve TAN within 60 seconds
-        # Retry authentication flow
-        
-    except NetworkTimeoutError as e:
-        print(f"Network timeout: {e}")
-        # Check internet connection, retry later
-        
-    try:
-        # Fetch data
-        balances = await client.get_account_balances()
-        
-    except ValidationError as e:
-        print(f"Invalid request parameters: {e}")
-        # Check query parameter values
-        
-    except ServerError as e:
-        print(f"Server error: {e}")
-        # Retry later - server-side issue
-        
-    except TokenExpiredError as e:
-        print(f"Token expired: {e}")
-        # Automatic refresh failed, reauthentication needed
-        await client.authenticate()
-        
-    except AccountNotFoundError as e:
-        print(f"Account not found: {e}")
-        # Invalid account UUID provided
-        
-    except ServerError as e:
-        print(f"Server error: {e}")
-        # API returned 500 error
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
-```
-
-### ServerError Details
-
-The `ServerError` exception is raised when the API returns a 500 Internal Server Error:
-
-```python
-try:
-    balances = await client.get_account_balances()
-except ServerError as e:
-    print(f"Server error: {e}")
-    # Handle server error - consider retrying later
 ```
 
 ---
@@ -1023,130 +945,12 @@ logger.setLevel(logging.DEBUG)  # Set DEBUG for detailed logs
 | **WARNING** | Recoverable issues | `Token refresh failed - token expired` |
 | **ERROR** | Critical failures | `Authentication failed: Invalid credentials` |
 
-### Example Log Output
-
-```
-INFO: Starting authentication flow
-DEBUG: Step 1: Obtaining OAuth2 password credentials token
-INFO: OAuth2 token obtained: 1a2b3c4d...
-DEBUG: Step 2: Retrieving session status
-INFO: Session UUID retrieved: abcd1234...
-DEBUG: Step 3: Creating TAN challenge
-INFO: TAN challenge created - Type: P_TAN_PUSH, ID: challenge123
-INFO: Step 4: Polling for TAN approval (P_TAN_PUSH)
-DEBUG: Polling TAN status
-DEBUG: TAN approval pending, continuing poll
-INFO: TAN approved via P_TAN_PUSH
-DEBUG: Step 4b: Activating session
-INFO: Session activated successfully
-DEBUG: Step 5: Exchanging for secondary token
-INFO: Secondary token obtained: xyz789..., expires in 599s
-INFO: Authentication successful
-INFO: Token refresh task started
-DEBUG: Next token refresh in 479s
-```
-
-### Sensitive Data Sanitization
-
-**Automatic sanitization of:**
-
-- Access tokens (only first 8 characters shown)
-- Refresh tokens (sanitized)
-- Passwords (never logged)
-- Session IDs (sanitized)
-
-```python
-# Logged as:
-"OAuth2 token obtained: 1a2b3c4d..."  # Only prefix shown
-"Session UUID retrieved: abcd1234..."  # Sanitized
-
-# Never logged in full:
-- self._password
-- Complete tokens
-```
-
 ---
 
-## Security Notes
-
-### Credential Management
-
-**❌ Never commit credentials to version control:**
-
-```bash
-# Add to .gitignore
-.env
-*.env
-credentials.json
-```
-
-**✅ Use environment variables or secure vaults:**
-
-```python
-import os
-
-client = ComdirectClient(
-    client_id=os.getenv("COMDIRECT_CLIENT_ID"),
-    client_secret=os.getenv("COMDIRECT_CLIENT_SECRET"),
-    username=os.getenv("COMDIRECT_USERNAME"),
-    password=os.getenv("COMDIRECT_PASSWORD"),
-)
-```
-
-**✅ Production considerations:**
-
-- Use AWS Secrets Manager, HashiCorp Vault, or similar
-- Encrypt credentials at rest
-- Rotate credentials regularly
-- Use least-privilege principle
-
-### Token Security
-
-- Tokens are automatically sanitized in logs
-- Tokens stored only in memory (not persisted to disk)
-- Use HTTPS for all API calls (enforced by default)
-- Consider implementing token persistence with encryption
-
-### API Security
-
-- TAN (Two-Factor Authentication) required for all sessions
-- Supports Push-TAN, Photo-TAN, SMS-TAN
-- Session timeout enforced by Comdirect API
-- Rate limiting protection built-in
-
----
-
-## Additional Resources
-
-### Official Documentation
-
-- [Comdirect Developer Portal](https://entwickler.comdirect.de)
-- [API Reference](https://entwickler.comdirect.de/content/howto/api-uebersicht)
-- [OAuth2 Documentation](https://oauth.net/2/)
-
-### Project Documentation
-
-- **`comdirect_api.feature`** - Gherkin BDD specification (39 scenarios)
-- **`examples/basic_usage.py`** - Complete working example
-
-### Requirements
-
-- Python 3.9+
-- httpx (async HTTP client)
-- pydantic (data validation)
-
-### License
+## License
 
 MIT License - see LICENSE file for details
 
-### Support
-
-For issues, questions, or contributions:
-
-- Open an issue on GitHub
-- Refer to the Gherkin specification (`comdirect_api.feature`) for behavior details
-- Check the example scripts in `examples/`
-
-### Disclaimer
+## Disclaimer
 
 This is an unofficial client library. Use at your own risk. The authors are not affiliated with Comdirect Bank AG.
