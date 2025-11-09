@@ -529,7 +529,7 @@ class ComdirectClient:
 
                 return True
 
-            except httpx.TimeoutException as e:
+            except httpx.TimeoutException:
                 logger.error("Network timeout during token refresh")
                 return False
             except httpx.HTTPStatusError as e:

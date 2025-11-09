@@ -1,7 +1,6 @@
 """Integration tests for HTTP error handling and query parameters."""
 
 import pytest
-import httpx
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -177,7 +176,7 @@ class TestFieldNameFallback:
 
     def test_transaction_parse_with_debtor_field(self):
         """Test parsing transaction with correct 'debtor' field."""
-        from comdirect_client import Transaction, AccountInformation
+        from comdirect_client import Transaction
 
         data = {
             "bookingStatus": "BOOKED",

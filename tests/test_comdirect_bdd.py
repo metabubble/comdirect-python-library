@@ -6,18 +6,13 @@ defined in comdirect_api.feature.
 
 import logging
 from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
 from pytest_bdd import given, parsers, scenarios, then, when
 
 from comdirect_client.client import ComdirectClient
-from comdirect_client.exceptions import (
-    AuthenticationError,
-    TANTimeoutError,
-    TokenExpiredError,
-)
 
 # Load all scenarios from the feature file
 scenarios("../comdirect_api.feature")
@@ -196,15 +191,7 @@ def tan_polling_configured():
 def verify_polling_logs(log_capture, log_message):
     """Verify polling logs appear."""
     # Count how many times the polling log appears
-    matching_logs = [r for r in log_capture.records if log_message in r.message]
-    # In actual tests, we'd verify the count matches expected polls
-    pass
-
-
-@then("the library should activate the session after TAN approval")
-def session_activated():
-    """Verify session activation."""
-    pass
+    # In actual tests, we would verify the count matches expected polls
 
 
 @then("the library should exchange for secondary token")

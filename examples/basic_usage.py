@@ -146,11 +146,11 @@ async def main():
                     if tx.amount:
                         logger.info(f"    Amount: {tx.amount.value} {tx.amount.unit}")
                     else:
-                        logger.info(f"    Amount: N/A")
+                        logger.info("    Amount: N/A")
                     if tx.transactionType:
                         logger.info(f"    Type: {tx.transactionType.text}")
                     else:
-                        logger.info(f"    Type: N/A")
+                        logger.info("    Type: N/A")
                     logger.info(
                         f"    Text: {tx.remittanceInfo[:50] if tx.remittanceInfo else 'N/A'}..."
                     )
