@@ -6,7 +6,7 @@ import logging
 import time
 import uuid
 from datetime import datetime, timedelta
-from typing import Any, Callable, Optional, cast, cast
+from typing import Any, Callable, Optional, cast
 
 import httpx
 
