@@ -70,9 +70,9 @@ class Account:
             accountType=EnumText.from_dict(data["accountType"]),
             iban=data.get("iban"),
             bic=data.get("bic"),
-            creditLimit=AmountValue.from_dict(data["creditLimit"])
-            if "creditLimit" in data
-            else None,
+            creditLimit=(
+                AmountValue.from_dict(data["creditLimit"]) if "creditLimit" in data else None
+            ),
         )
 
 
@@ -150,15 +150,17 @@ class Transaction:
             remittanceInfo=data.get("remittanceInfo"),
             newTransaction=data["newTransaction"],
             bookingDate=booking_date,
-            remitter=AccountInformation.from_dict(data["remitter"])
-            if data.get("remitter")
-            else None,
-            debtor=AccountInformation.from_dict(data.get("debtor") or data.get("deptor", {}))
-            if data.get("debtor") or data.get("deptor")
-            else None,
-            creditor=AccountInformation.from_dict(data["creditor"])
-            if data.get("creditor")
-            else None,
+            remitter=(
+                AccountInformation.from_dict(data["remitter"]) if data.get("remitter") else None
+            ),
+            debtor=(
+                AccountInformation.from_dict(data.get("debtor") or data.get("deptor", {}))
+                if data.get("debtor") or data.get("deptor")
+                else None
+            ),
+            creditor=(
+                AccountInformation.from_dict(data["creditor"]) if data.get("creditor") else None
+            ),
             endToEndReference=data.get("endToEndReference"),
             directDebitCreditorId=data.get("directDebitCreditorId"),
             directDebitMandateId=data.get("directDebitMandateId"),
