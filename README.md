@@ -1,5 +1,6 @@
 # Comdirect Python API Client
 
+[![PyPI version](https://img.shields.io/pypi/v/comdirect-client.svg)](https://pypi.org/project/comdirect-client/)
 [![Tests](https://github.com/mcdax/comdirect-python-library/actions/workflows/tests.yml/badge.svg)](https://github.com/mcdax/comdirect-python-library/actions/workflows/tests.yml)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -94,14 +95,25 @@ comdirect-lib/
 
 ### Prerequisites
 
-- **Python 3.9+** (tested with Python 3.9-3.11)
-- **Poetry** (recommended) or pip
+- **Python 3.9+** (tested with Python 3.9-3.12)
 
-### Using Poetry (Recommended)
+### Using pip (Recommended)
+
+Install directly from PyPI:
+
+```bash
+pip install comdirect-client
+```
+
+### For Development
+
+If you want to contribute or modify the library:
+
+#### Using Poetry
 
 ```bash
 # Clone the repository
-git clone <repository-url>
+git clone https://github.com/mcdax/comdirect-python-library.git
 cd comdirect-lib
 
 # Install production dependencies
@@ -114,9 +126,13 @@ poetry install --with dev
 poetry shell
 ```
 
-### Using pip
+#### Using pip
 
 ```bash
+# Clone the repository
+git clone https://github.com/mcdax/comdirect-python-library.git
+cd comdirect-lib
+
 # Install in editable mode
 pip install -e .
 
@@ -262,7 +278,13 @@ poetry run black --check .
 
 ## Quick Start
 
-### 1. Basic Usage Example
+### 1. Install the Package
+
+```bash
+pip install comdirect-client
+```
+
+### 2. Basic Usage Example
 
 ```python
 import asyncio
@@ -289,12 +311,11 @@ async def main():
         print(f"\nFound {len(balances)} accounts:")
         for balance in balances:
             print(f"  {balance.account_display_id}: {balance.balance.value} {balance.balance.unit}")
-        
-         # Fetch transactions for first account
+         
+         # Fetch all transactions for first account (up to 500 most recent)
          if balances:
              transactions = await client.get_transactions(
-                 account_id=balances[0].accountId,
-                 transaction_state="BOOKED",  # Only booked transactions
+                 account_id=balances[0].accountId
              )
              print(f"\nFound {len(transactions)} transactions:")
              for tx in transactions[:5]:  # Show first 5
@@ -303,11 +324,27 @@ async def main():
                  print(f"  {display_date}: {tx.amount.value} {tx.amount.unit}")
 
 
+
 if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-### 2. Run the Example
+### 3. Set Up Your Credentials
+
+```bash
+# Set environment variables
+export COMDIRECT_CLIENT_ID="your_client_id"
+export COMDIRECT_CLIENT_SECRET="your_client_secret"
+export COMDIRECT_USERNAME="your_username"
+export COMDIRECT_PASSWORD="your_password"
+
+# Run your script
+python your_script.py
+```
+
+### 4. Run the Included Example (Development Only)
+
+If you've cloned the repository:
 
 ```bash
 # Export credentials
@@ -489,7 +526,7 @@ balances = await client.get_account_balances(
 
 #### `get_transactions()`
 
-Retrieve transactions for a specific account:
+Retrieve **all available** transactions for a specific account (up to 500 per call):
 
 ```python
 from comdirect_client.models import Transaction
@@ -498,7 +535,6 @@ transactions: list[Transaction] = await client.get_transactions(
     account_id="account-uuid-here",                   # Required: Account UUID
     transaction_state="BOOKED",                       # Optional: Filter by state
     transaction_direction="CREDIT_AND_DEBIT",         # Optional: Filter by direction
-    paging_first=0,                                   # Optional: Pagination index
 )
 
 for tx in transactions:
@@ -507,7 +543,10 @@ for tx in transactions:
     print(f"Date: {display_date}")                 # Booking date or valuta date (ISO format)
     print(f"Amount: {tx.amount.value} {tx.amount.unit}")  # Transaction amount
     print(f"Type: {tx.booking_key}")                  # Transaction type code
-    print(f"Info: {tx.remittance_info}")              # Payment purpose
+    # Remittance information is parsed into structured lines
+    print("Remittance lines:")
+    for line in tx.remittance_lines:
+        print(f"  - {line}")
     print()
 ```
 
@@ -518,7 +557,6 @@ async def get_transactions(
     account_id: str,
     transaction_state: Optional[str] = None,
     transaction_direction: Optional[str] = None,
-    paging_first: Optional[int] = None,
     with_attributes: bool = True,
     without_attributes: Optional[str] = None
 ) -> list[Transaction]
@@ -531,7 +569,6 @@ async def get_transactions(
 | `account_id` | `str` | UUID | **Required** | Account UUID from `AccountBalance.accountId` |
 | `transaction_state` | `Optional[str]` | `"BOOKED"`, `"NOTBOOKED"`, `"BOTH"` | `None` | Filter by booking state |
 | `transaction_direction` | `Optional[str]` | `"CREDIT"`, `"DEBIT"`, `"CREDIT_AND_DEBIT"` | `None` | Filter by direction |
-| `paging_first` | `Optional[int]` | 0+ | `None` | Starting index for pagination |
 | `with_attributes` | `bool` | - | `True` | Include account details in response |
 | `without_attributes` | `Optional[str]` | attribute names | `None` | Comma-separated attributes to exclude |
 
@@ -547,26 +584,29 @@ async def get_transactions(
 - `DEBIT` - Only outgoing transactions (withdrawals)
 - `CREDIT_AND_DEBIT` - Both incoming and outgoing
 
-**Pagination Example:**
+**⚠️ Pagination Limitations:**
+
+The Comdirect API has significant pagination limitations:
+
+- **Default page size**: Returns only **20 transactions** per page
+- **`paging-first` parameter**: Does **NOT support offset-based pagination**
+  - Only accepts value `0` (returns 422 error for any value > 0)
+  - Traditional page-by-page navigation is not supported
+- **Library behavior**: `get_transactions()` uses `paging-count=500` internally to fetch up to 500 transactions in one call (API limit).
 
 ```python
-# Fetch first 50 transactions
-page1 = await client.get_transactions(account_id="...", paging_first=0)
-
-# Fetch next 50 transactions
-page2 = await client.get_transactions(account_id="...", paging_first=50)
-
-# Fetch next 50 transactions
-page3 = await client.get_transactions(account_id="...", paging_first=100)
+# Fetch up to 500 most recent transactions
+transactions = await client.get_transactions(account_id="...")
+print(f"Retrieved {len(transactions)} transactions (up to 500)")
 ```
 
 **Response Fields:**
 
-- `booking_date` (str) - Booking date (ISO format: "2024-11-09") - **May be None for pending transactions**
-- `valuta_date` (str) - Value date (ISO format) - Use as fallback if `booking_date` is not available
+- `booking_date` (Optional[str]) - Booking date (ISO format: "2024-11-09") - **May be None for pending transactions**
+- `valuta_date` (Optional[str]) - Value date (ISO format) - Use as fallback if `booking_date` is not available
 - `amount` (AmountValue) - Transaction amount (positive for credit, negative for debit)
 - `booking_key` (str) - Transaction type code (e.g., "DIRECT_DEBIT", "TRANSFER")
-- `remittance_info` (Optional[str]) - Payment purpose/description
+- `remittanceLines` (list[str]) - Parsed remittance lines extracted from the raw `remittanceInfo` field
 - `creditor_id` (Optional[str]) - Creditor identifier
 - `mandate_reference` (Optional[str]) - SEPA mandate reference
 
@@ -599,11 +639,169 @@ recent = [tx for tx in all_transactions if (tx.booking_date or tx.valuta_date or
 print(f"Found {len(recent)} transactions in last 30 days")
 ```
 
-**Errors:**
+---
 
-- `TokenExpiredError` - Authentication expired
-- `AccountNotFoundError` - Account UUID doesn't exist
-- `NetworkTimeoutError` - Request timed out
+### Advanced: Pagination and API Limits
+
+The Comdirect API uses server-side pagination with a hard limit of 500 transactions per request and does **not** support offset-based pagination via `paging-first`.
+
+**Key points:**
+
+- Default page size is 20 transactions.
+- `paging-first` only accepts `0` (no offset pagination).
+- The library's `get_transactions()` method always requests `paging-count=500` to maximize results in a single call.
+- You cannot retrieve more than 500 transactions for an account in one request.
+
+To access more than 500 transactions over time, you can implement date-based chunking or regular polling on top of `get_transactions()` (see strategies below).
+
+#### Fetching More Than 500 Transactions
+
+⚠️ **Important:** The comdirect API has a hard limit of 500 transactions per request, and `paging-first` only accepts `0` (no offset pagination). This means you **cannot** retrieve more than 500 transactions by pagination alone.
+
+**Strategy 1: Use Date Filtering (`min-bookingDate`)**
+
+The most reliable way to access more than 500 transactions is to use date-based filtering and make multiple requests:
+
+```python
+from datetime import datetime, timedelta
+from typing import List
+
+async def fetch_all_transactions_by_date(
+    client, 
+    account_uuid: str,
+    start_date: str,  # Format: "YYYY-MM-DD"
+    end_date: str     # Format: "YYYY-MM-DD"
+) -> List[Transaction]:
+    """
+    Fetch transactions across multiple date ranges to bypass the 500 limit.
+    
+    Strategy: Break large date ranges into smaller chunks (e.g., 30-day periods)
+    """
+    all_transactions = []
+    current_date = datetime.strptime(start_date, "%Y-%m-%d")
+    final_date = datetime.strptime(end_date, "%Y-%m-%d")
+    
+    while current_date <= final_date:
+        # Calculate date range (e.g., 30-day chunks)
+        chunk_end = min(current_date + timedelta(days=30), final_date)
+        
+        print(f"Fetching transactions from {current_date.strftime('%Y-%m-%d')} "
+              f"to {chunk_end.strftime('%Y-%m-%d')}")
+        
+        # Calculate max_age_days from current date to chunk_end
+        days_diff = (datetime.now() - current_date).days
+        
+        # Fetch transactions for this date range
+        transactions = await client.get_all_transactions(
+            account_uuid=account_uuid,
+            max_age_days=days_diff  # API-side filter
+        )
+        
+        # Client-side filter to only include transactions within chunk range
+        chunk_start_str = current_date.strftime("%Y-%m-%d")
+        chunk_end_str = chunk_end.strftime("%Y-%m-%d")
+        
+        filtered = [
+            tx for tx in transactions
+            if chunk_start_str <= (tx.booking_date or tx.valuta_date or "") <= chunk_end_str
+        ]
+        
+        all_transactions.extend(filtered)
+        print(f"  Found {len(filtered)} transactions in this period")
+        
+        # Move to next chunk
+        current_date = chunk_end + timedelta(days=1)
+    
+    # Remove duplicates (in case of overlapping date ranges)
+    seen_refs = set()
+    unique_transactions = []
+    for tx in all_transactions:
+        ref = (tx.booking_date, tx.valuta_date, tx.amount.value if tx.amount else None, tx.reference)
+        if ref not in seen_refs:
+            seen_refs.add(ref)
+            unique_transactions.append(tx)
+    
+    return unique_transactions
+
+# Usage example:
+transactions = await fetch_all_transactions_by_date(
+    client,
+    account_uuid="YOUR_ACCOUNT_UUID",
+    start_date="2024-01-01",
+    end_date="2025-11-16"
+)
+print(f"Total transactions retrieved: {len(transactions)}")
+```
+
+**Strategy 2: Historical Data Export (Recommended for Large Datasets)**
+
+If you need transaction history beyond what the API provides:
+
+1. **Use Comdirect's Web Interface**: Log in to comdirect.de and export transactions as CSV/PDF for historical analysis
+2. **Combine API + Historical Data**: 
+   - Use the API for recent transactions (last 500)
+   - Use exported CSV files for older historical data
+3. **Regular Polling**: Set up a scheduled job to fetch and store transactions daily/weekly, building your own historical database
+
+```python
+import sqlite3
+from datetime import datetime, timedelta
+
+async def poll_and_store_transactions(client, account_uuid: str, db_path: str):
+    """
+    Fetch recent transactions and store them in a local database.
+    Run this daily to build a complete transaction history.
+    """
+    # Fetch up to 500 most recent transactions
+    transactions = await client.get_all_transactions(account_uuid)
+    
+    # Store in SQLite database
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    
+    # Create table if not exists
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS transactions (
+            booking_date TEXT,
+            valuta_date TEXT,
+            amount REAL,
+            currency TEXT,
+            reference TEXT,
+            remittance_info TEXT,
+            creditor_name TEXT,
+            PRIMARY KEY (booking_date, valuta_date, amount, reference)
+        )
+    """)
+    
+    # Insert new transactions (ignore duplicates)
+    for tx in transactions:
+        cursor.execute("""
+            INSERT OR IGNORE INTO transactions 
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (
+            tx.booking_date,
+            tx.valuta_date,
+            float(tx.amount.value) if tx.amount else None,
+            tx.amount.unit if tx.amount else None,
+            tx.reference,
+            tx.remittanceInfo,
+            tx.creditor.holderName if tx.creditor else None
+        ))
+    
+    conn.commit()
+    conn.close()
+    print(f"Stored {len(transactions)} transactions (duplicates ignored)")
+
+# Run daily via cron job or scheduler
+await poll_and_store_transactions(client, account_uuid, "transactions.db")
+```
+
+**Key Takeaways:**
+
+- ✅ **For most use cases**: Use `get_all_transactions()` to fetch up to 500 transactions
+- ✅ **For >500 transactions**: Use date-based filtering with multiple API calls
+- ✅ **For historical analysis**: Implement regular polling and store transactions locally
+- ❌ **NOT possible**: Offset-based pagination (API limitation)
 
 ---
 
@@ -842,14 +1040,19 @@ print(balance.balance.unit)        # "EUR"
 ```python
 @dataclass
 class Transaction:
-    booking_date: str                   # Booking date (ISO format)
-    valuta_date: str                    # Value date (ISO format)
+    booking_date: Optional[str]         # Booking date (ISO format), may be None
+    valuta_date: Optional[str]          # Value date (ISO format), may be None
     amount: AmountValue                 # Transaction amount
     booking_key: str                    # Transaction type code
-    remittance_info: Optional[str]      # Payment purpose
+    remittanceLines: list[str]          # Parsed remittance lines
     creditor_id: Optional[str]          # Creditor identifier
     mandate_reference: Optional[str]    # SEPA mandate reference
     # ... and more fields
+
+    @property
+    def remittance_lines(self) -> list[str]:
+        """Convenience alias for remittanceLines."""
+        return self.remittanceLines
 ```
 
 **Example:**
@@ -860,7 +1063,7 @@ print(tx.booking_date)     # "2024-11-09"
 print(tx.amount.value)     # -12.50 (negative = debit)
 print(tx.amount.unit)      # "EUR"
 print(tx.booking_key)      # "DIRECT_DEBIT"
-print(tx.remittance_info)  # "SPC*Mandragora Bochum"
+print(tx.remittance_lines) # ["SPC*Mandragora Bochum", "Order 123-4567890-1234567"]
 ```
 
 ### AmountValue

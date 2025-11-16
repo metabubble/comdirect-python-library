@@ -178,7 +178,7 @@ Feature: Comdirect API Client Library
     And an account with accountId exists
     When the user requests transactions for the accountId
     Then the library should check token expiry before request
-    And the library should log "DEBUG: Fetching transactions for account {accountId}"
+    And the library should log "DEBUG: Fetching ALL transactions for account {accountId}"
     And the library should GET /api/banking/v1/accounts/{accountId}/transactions
     And the library should include Authorization header with bearer token
     And the library should include x-http-request-info header
@@ -192,53 +192,48 @@ Feature: Comdirect API Client Library
     And an account with accountId exists
     When the user requests transactions with transactionDirection="DEBIT"
     Then the library should add query parameter "transactionDirection=DEBIT"
-    And the library should log "DEBUG: Fetching transactions (direction: DEBIT)"
+    And the library should log "DEBUG: Fetching ALL transactions for account {accountId} (direction: DEBIT)"
     And the library should return only debit transactions
-
-  Scenario: Retrieve transactions with pagination
-    Given the library is authenticated with valid tokens
-    And an account with accountId exists
-    When the user requests transactions with paging_first=10
-    Then the library should add query parameter "paging-first=10"
-    And the library should log "DEBUG: Fetching transactions (starting at: 10)"
-    And the library should return transactions starting from index 10
 
   Scenario: Retrieve transactions with booking status filter
     Given the library is authenticated with valid tokens
     And an account with accountId exists
     When the user requests transactions with transactionState="BOOKED"
     Then the library should add query parameter "transactionState=BOOKED"
-    And the library should log "DEBUG: Fetching BOOKED transactions"
+    And the library should log "DEBUG: Fetching ALL transactions for account {accountId} (state: BOOKED)"
     And the library should return only booked transactions
 
-  Scenario: Parse transaction response into typed structures
-    Given the library receives a valid transactions response
-    When the library parses the response
-    Then each transaction should be converted to a Transaction object
-    And each Transaction should have a bookingStatus property of type str
-    And each Transaction should have a bookingDate property of type Optional[date]
-    And each Transaction should have an amount property of type Optional[AmountValue]
-    And each Transaction should have optional remitter property of type Optional[AccountInformation]
-    And each Transaction should have optional creditor property of type Optional[AccountInformation]
-    And each Transaction should have a reference property of type str
-    And each Transaction should have a transactionType property of type Optional[EnumText]
-    And each Transaction should have a remittanceInfo property of type Optional[str]
-    And negative amounts should indicate outgoing transactions
-    And positive amounts should indicate incoming transactions
-    And the library should log "DEBUG: Parsed {count} transaction objects"
+   Scenario: Parse transaction response into typed structures
+     Given the library receives a valid transactions response
+     When the library parses the response
+     Then each transaction should be converted to a Transaction object
+     And each Transaction should have a bookingStatus property of type str
+     And each Transaction should have a bookingDate property of type Optional[date]
+     And each Transaction should have an amount property of type Optional[AmountValue]
+     And each Transaction should have optional remitter property of type Optional[AccountInformation]
+     And each Transaction should have optional creditor property of type Optional[AccountInformation]
+     And each Transaction should have a reference property of type str
+     And each Transaction should have a transactionType property of type Optional[EnumText]
+     And each Transaction should have a remittanceLines field of type list[str]
+     And each Transaction should expose a remittance_lines property returning the same list
+     And negative amounts should indicate outgoing transactions
+     And positive amounts should indicate incoming transactions
+     And the library should log "DEBUG: Parsed {count} transaction objects"
 
-  Scenario: Handle transactions with null optional fields gracefully
-    Given the library receives a transactions response with null fields
-    And some transactions have null amount
-    And some transactions have null transactionType
-    And some transactions have null remittanceInfo
-    And some transactions have null bookingDate
-    And some AccountInformation objects have null iban
-    When the library parses the response
-    Then the library should not raise an exception
-    And Transaction objects should be created with None values for null fields
-    And the library should safely handle from_dict() calls on null nested objects
-    And the library should log "DEBUG: Parsed {count} transaction objects"
+
+   Scenario: Handle transactions with null optional fields gracefully
+     Given the library receives a transactions response with null fields
+     And some transactions have null amount
+     And some transactions have null transactionType
+     And some transactions have null bookingDate
+     And some AccountInformation objects have null iban
+     When the library parses the response
+     Then the library should not raise an exception
+     And Transaction objects should be created with None values for null fields
+     And Transaction objects should have an empty remittanceLines list when remittanceInfo is missing or empty
+     And the library should safely handle from_dict() calls on null nested objects
+     And the library should log "DEBUG: Parsed {count} transaction objects"
+
 
   # ============================================================================
   # Error Handling and Logging
@@ -550,4 +545,33 @@ Feature: Comdirect API Client Library
     Then the library should prefer the correct "debtor" field
     And transaction.debtor should be populated from "debtor"
     And "deptor" should be ignored
+
+   # ============================================================================
+   # New: remittance line marker handling
+   # ============================================================================
+
+   Scenario: Parse remittanceInfo with numbered line prefixes into remittanceLines
+     Given the library receives a valid transactions response
+     And some transactions have remittanceInfo values with numbered line prefixes
+     When the library parses the response
+     Then each Transaction should have a remittanceLines field of type list[str]
+     And each Transaction should expose a remittance_lines property returning the same list
+     And the library should detect numbered line markers (01, 02, 03, ... up to 99)
+     And the library should support both short test-format remittanceInfo strings
+     And the library should support long fixed-width remittanceInfo strings from the real API
+     And for long-format strings, the library should detect markers using approximate spacing between markers
+     And the library should extract the content after each marker as a logical line
+     And the library should populate remittanceLines with one entry per logical line, in order
+     And example "01AA02 N84G BFT2 Y5KY                02End-to-End-Ref.:                   03nicht angegeben                    " should produce remittanceLines:
+       | AA02 N84G BFT2 Y5KY
+       | End-to-End-Ref.:
+       | nicht angegeben
+     And example "01Storno Echtzeitüberweisung         02AA02 N84G BFT2 Y5KY                03Rückgabegrund:                     04Auf Veranlassung der Bank          " should produce remittanceLines:
+       | Storno Echtzeitüberweisung
+       | AA02 N84G BFT2 Y5KY
+       | Rückgabegrund:
+       | Auf Veranlassung der Bank
+     And the library should strip trailing whitespace from each line
+     And the library should skip empty lines after stripping
+
 

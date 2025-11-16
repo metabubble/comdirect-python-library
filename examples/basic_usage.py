@@ -2,18 +2,21 @@
 """Basic usage example for the Comdirect API client.
 
 This example demonstrates:
-1. Client initialization
-2. Authentication with TAN challenge
+1. Client initialization with token persistence
+2. Authentication with TAN challenge (only needed on first run)
 3. Fetching account balances
-4. Fetching transactions for an account
+4. Fetching ALL transactions across ALL accounts
 5. Automatic token refresh
 6. Reauth callback handling
+7. Exporting all transactions to JSON file
 """
 
 import asyncio
+import json
 import logging
 import os
 from datetime import datetime
+from pathlib import Path
 
 from comdirect_client.client import ComdirectClient
 
@@ -25,6 +28,43 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+
+
+def write_transactions_to_json(transactions, filename="transactions.json"):
+    """Write transactions to a JSON file.
+
+    Args:
+        transactions: List of transaction objects
+        filename: Output JSON filename
+    """
+    output_path = Path(filename)
+
+    # Convert transactions to JSON-serializable format
+    transactions_data = []
+    for tx in transactions:
+        tx_dict = {
+            "bookingStatus": tx.bookingStatus,
+            "reference": tx.reference,
+            "valutaDate": str(tx.valutaDate) if tx.valutaDate else None,
+            "newTransaction": tx.newTransaction,
+            "bookingDate": str(tx.bookingDate) if tx.bookingDate else None,
+            "remittanceLines": tx.remittance_lines,  # Parsed lines with markers stripped
+            "amount": {
+                "value": str(tx.amount.value) if tx.amount else None,
+                "unit": tx.amount.unit if tx.amount else None,
+            },
+            "transactionType": tx.transactionType.text if tx.transactionType else None,
+            "remitter": tx.remitter,
+            "debtor": tx.debtor,
+            "creditor": tx.creditor,
+        }
+        transactions_data.append(tx_dict)
+
+    # Write to JSON file
+    with open(output_path, "w") as f:
+        json.dump(transactions_data, f, indent=2, default=str)
+
+    logger.info(f"✅ Wrote {len(transactions_data)} transactions to {output_path}")
 
 
 def reauth_callback(reason: str):
@@ -67,29 +107,41 @@ async def main():
         base_url="https://api.comdirect.de",  # Production API
         reauth_callback=reauth_callback,  # Optional callback
         token_refresh_threshold_seconds=120,  # Refresh 2 minutes before expiry
+        token_storage_path=os.path.expanduser("~/.comdirect_tokens.json"),  # Persist tokens
     ) as client:
         logger.info("=" * 60)
         logger.info("Step 1: Authentication")
         logger.info("=" * 60)
 
-        try:
-            # Perform full authentication (Steps 1-5)
-            # This will trigger a TAN challenge on your device
-            await client.authenticate()
-
-            logger.info("✅ Authentication successful!")
-
-            # Check token expiry
+        # Check if we already have valid tokens from storage
+        if client.is_authenticated():
+            logger.info("✅ Using existing tokens from storage")
             expiry = client.get_token_expiry()
             if expiry:
                 logger.info(f"Token expires at: {expiry.strftime('%Y-%m-%d %H:%M:%S')}")
                 logger.info(
                     f"Token valid for: {(expiry - datetime.now()).total_seconds():.0f} seconds"
                 )
+        else:
+            try:
+                # Perform full authentication (Steps 1-5)
+                # This will trigger a TAN challenge on your device
+                logger.info("No valid tokens found, starting authentication flow...")
+                await client.authenticate()
 
-        except Exception as e:
-            logger.error(f"❌ Authentication failed: {e}")
-            return
+                logger.info("✅ Authentication successful!")
+
+                # Check token expiry
+                expiry = client.get_token_expiry()
+                if expiry:
+                    logger.info(f"Token expires at: {expiry.strftime('%Y-%m-%d %H:%M:%S')}")
+                    logger.info(
+                        f"Token valid for: {(expiry - datetime.now()).total_seconds():.0f} seconds"
+                    )
+
+            except Exception as e:
+                logger.error(f"❌ Authentication failed: {e}")
+                return
 
         # Wait a bit to demonstrate the authentication is complete
         await asyncio.sleep(2)
@@ -120,28 +172,45 @@ async def main():
 
         logger.info("")
         logger.info("=" * 60)
-        logger.info("Step 3: Fetch Transactions")
+        logger.info("Step 3: Fetch ALL Transactions")
         logger.info("=" * 60)
 
         if balances:
-            # Get transactions for the first account
-            account = balances[0]
-            account_id = account.accountId
+            # Fetch all transactions from ALL accounts
+            all_transactions = []
 
-            try:
-                # Fetch all transactions (default: BOTH booked and pending, CREDIT_AND_DEBIT)
-                transactions = await client.get_transactions(
-                    account_id=account_id,
-                    # transaction_state="BOOKED",  # Optional: filter by booking state
-                    # transaction_direction="DEBIT",  # Optional: filter by direction (CREDIT/DEBIT/CREDIT_AND_DEBIT)
-                    # paging_first=0,  # Optional: pagination starting index
-                )
+            for account in balances:
+                account_id = account.accountId
+                account_display = account.account.accountDisplayId
 
-                logger.info(f"✅ Found {len(transactions)} transactions:")
+                try:
+                    logger.info(f"\n📊 Fetching ALL transactions for account: {account_display}")
 
-                # Display first 5 transactions
-                for i, tx in enumerate(transactions[:10]):
-                    logger.info(f"\n  Transaction {i+1}:")
+                    # Fetch ALL transactions for this account (up to 500 most recent)
+                    transactions = await client.get_transactions(
+                        account_id=account_id,
+                        # transaction_state="BOOKED",  # Optional: filter by booking state
+                        # transaction_direction="DEBIT",  # Optional: filter by direction (CREDIT/DEBIT/CREDIT_AND_DEBIT)
+                    )
+
+                    all_transactions.extend(transactions)
+                    logger.info(
+                        f"   ✅ Found {len(transactions)} transactions (max 500 per account)"
+                    )
+
+                except Exception as e:
+                    logger.error(f"❌ Failed to fetch transactions for {account_display}: {e}")
+
+            logger.info("")
+            logger.info("=" * 60)
+            logger.info(f"✅ TOTAL TRANSACTIONS ACROSS ALL ACCOUNTS: {len(all_transactions)}")
+            logger.info("=" * 60)
+
+            if all_transactions:
+                # Display first 10 transactions
+                logger.info("\nShowing first 10 transactions:")
+                for i, tx in enumerate(all_transactions[:10]):
+                    logger.info(f"\n  Transaction {i + 1}:")
                     logger.info(f"    Date: {tx.bookingDate or 'N/A'}")
                     if tx.amount:
                         logger.info(f"    Amount: {tx.amount.value} {tx.amount.unit}")
@@ -151,15 +220,14 @@ async def main():
                         logger.info(f"    Type: {tx.transactionType.text}")
                     else:
                         logger.info("    Type: N/A")
-                    logger.info(
-                        f"    Text: {tx.remittanceInfo[:50] if tx.remittanceInfo else 'N/A'}..."
-                    )
+                    text = " | ".join(tx.remittance_lines) if tx.remittance_lines else "N/A"
+                    logger.info(f"    Text: {text[:50]}...")
 
-                if len(transactions) > 5:
-                    logger.info(f"\n  ... and {len(transactions) - 5} more transactions")
+                if len(all_transactions) > 10:
+                    logger.info(f"\n  ... and {len(all_transactions) - 10} more transactions")
 
-            except Exception as e:
-                logger.error(f"❌ Failed to fetch transactions: {e}")
+                # Write all transactions to JSON file
+                write_transactions_to_json(all_transactions, "transactions.json")
 
         logger.info("")
         logger.info("=" * 60)
@@ -170,10 +238,26 @@ async def main():
         logger.info("Tokens are refreshed 120 seconds before expiration.")
         logger.info("You can continue making API calls without worrying about token expiry.")
 
-        # Example: Keep the client alive for a while
-        logger.info("\nKeeping client alive for 30 seconds...")
+        # Demonstrate get_transactions, which now fetches up to 500 transactions
+        if balances:
+            first_account = balances[0]
+            account_id = first_account.accountId
+            account_display = first_account.account.accountDisplayId
+
+            logger.info(
+                "\n================ get_transactions() demonstration (fetch-all) ================"
+            )
+
+            try:
+                logger.info(f"Calling get_transactions() for {account_display}")
+                tx_all = await client.get_transactions(account_id=account_id)
+                logger.info(f"get_transactions() returned {len(tx_all)} transactions (max 500)")
+            except Exception as e:
+                logger.error(f"get_transactions() error: {e}")
+
+        logger.info("\nKeeping client alive for 10 seconds...")
         logger.info("(In production, the background task runs continuously)")
-        await asyncio.sleep(30)
+        await asyncio.sleep(10)
 
         logger.info("✅ Done! The client will clean up on exit.")
 

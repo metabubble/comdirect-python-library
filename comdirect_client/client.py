@@ -762,22 +762,24 @@ class ComdirectClient:
         account_id: str,
         transaction_state: Optional[str] = None,
         transaction_direction: Optional[str] = None,
-        paging_first: Optional[int] = None,
         with_attributes: bool = True,
         without_attributes: Optional[str] = None,
     ) -> list[Transaction]:
-        """Retrieve transactions for a specific account.
+        """Retrieve **all available** transactions for a specific account.
+
+        This method now uses the API's maximum page size to fetch up to
+        500 transactions in a single call (API limit). For accounts with more
+        than 500 transactions, only the most recent 500 will be returned.
 
         Args:
             account_id: Account UUID (from AccountBalance.accountId)
             transaction_state: Optional filter: "BOOKED", "NOTBOOKED", or "BOTH" (default: "BOTH")
             transaction_direction: Optional filter: "CREDIT", "DEBIT", or "CREDIT_AND_DEBIT" (default: "CREDIT_AND_DEBIT")
-            paging_first: Optional index of first transaction for pagination (default: 0)
             with_attributes: Include account details in response (default: True)
             without_attributes: Comma-separated list of attributes to exclude (optional)
 
         Returns:
-            List of Transaction objects
+            List of Transaction objects (up to 500 per call)
 
         Raises:
             TokenExpiredError: If authentication token is expired
@@ -788,14 +790,12 @@ class ComdirectClient:
         """
         await self._ensure_authenticated()
 
-        # Build query parameters
-        params: dict[str, str] = {}
+        # Build query parameters with maximum page size
+        params: dict[str, str] = {"paging-count": "500"}
         if transaction_state:
             params["transactionState"] = transaction_state
         if transaction_direction:
             params["transactionDirection"] = transaction_direction
-        if paging_first is not None:
-            params["paging-first"] = str(paging_first)
         if not with_attributes:
             params["without-attr"] = "account"
         if without_attributes:
@@ -804,13 +804,11 @@ class ComdirectClient:
             else:
                 params["without-attr"] = without_attributes
 
-        log_msg = f"Fetching transactions for account {account_id[:8]}..."
+        log_msg = f"Fetching ALL transactions for account {account_id[:8]}... (max: {params['paging-count']})"
         if transaction_direction:
             log_msg += f" (direction: {transaction_direction})"
         if transaction_state:
             log_msg += f" (state: {transaction_state})"
-        if paging_first is not None:
-            log_msg += f" (starting at: {paging_first})"
         logger.debug(log_msg)
 
         try:
@@ -821,7 +819,7 @@ class ComdirectClient:
                     "Accept": "application/json",
                     "x-http-request-info": self._get_request_info_header(),
                 },
-                params=params if params else None,
+                params=params,
             )
 
             if response.status_code == 401:
@@ -835,7 +833,6 @@ class ComdirectClient:
                     account_id,
                     transaction_state,
                     transaction_direction,
-                    paging_first,
                     with_attributes,
                     without_attributes,
                 )
@@ -856,8 +853,17 @@ class ComdirectClient:
             data = response.json()
 
             transactions = [Transaction.from_dict(item) for item in data["values"]]
-            logger.info(f"Retrieved {len(transactions)} transactions")
+            logger.info(
+                f"Retrieved {len(transactions)} transactions for account {account_id[:8]}..."
+            )
             logger.debug(f"Parsed {len(transactions)} transaction objects")
+
+            # Log pagination info for debugging
+            if "paging" in data:
+                paging_info = data["paging"]
+                logger.debug(
+                    f"Pagination: index={paging_info.get('index')}, matches={paging_info.get('matches')}"
+                )
 
             return transactions
 

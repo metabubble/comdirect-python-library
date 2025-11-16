@@ -143,7 +143,7 @@ class TestQueryParameterExposure:
             await client.get_transactions("test_account_id", with_attributes=False)
 
             call_args = mock_get.call_args
-            assert call_args.kwargs["params"] == {"without-attr": "account"}
+            assert call_args.kwargs["params"] == {"paging-count": "500", "without-attr": "account"}
 
     @pytest.mark.asyncio
     async def test_transactions_combined_parameters(self, client):
@@ -158,7 +158,6 @@ class TestQueryParameterExposure:
             await client.get_transactions(
                 "test_account_id",
                 transaction_direction="CREDIT",
-                paging_first=10,
                 without_attributes="booking",
             )
 
@@ -167,7 +166,7 @@ class TestQueryParameterExposure:
 
             # Verify all parameters are present
             assert params["transactionDirection"] == "CREDIT"
-            assert params["paging-first"] == "10"
+            assert params["paging-count"] == "500"
             assert params["without-attr"] == "booking"
 
 

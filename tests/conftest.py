@@ -10,3 +10,10 @@ pytest_plugins = ("pytest_asyncio",)
 def anyio_backend():
     """Configure async backend for pytest-asyncio."""
     return "asyncio"
+
+
+@pytest.fixture
+def log_capture(caplog):
+    """Fixture to capture and configure logging."""
+    caplog.set_level("DEBUG")
+    return caplog
