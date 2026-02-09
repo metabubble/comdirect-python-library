@@ -367,12 +367,12 @@ class ComdirectClient:
             poll_url = auth_info["link"]["href"]
 
             logger.info(f"TAN challenge created - Type: {tan_type}, ID: {challenge_id}")
-            logger.warning(f"TAN approval required - Method: {tan_type}, Timeout: 60 seconds")
+            logger.warning(f"TAN approval required - Method: {tan_type}, Timeout: 300 seconds")
 
             # Notify that TAN has been requested
             self._invoke_tan_status_callback(
                 "requested",
-                {"tan_type": tan_type, "challenge_id": challenge_id, "timeout_seconds": 60},
+                {"tan_type": tan_type, "challenge_id": challenge_id, "timeout_seconds": 300},
             )
 
             return challenge_id, tan_type, poll_url
