@@ -191,7 +191,7 @@ class ComdirectClient:
         1. Obtains OAuth2 password credentials token
         2. Retrieves session status
         3. Creates TAN challenge
-        4. Polls for TAN approval (300 second timeout)
+        4. Polls for TAN approval (60 second timeout)
         5. Activates session
         6. Exchanges for secondary token with banking scope
         7. Starts automatic token refresh task
@@ -367,12 +367,12 @@ class ComdirectClient:
             poll_url = auth_info["link"]["href"]
 
             logger.info(f"TAN challenge created - Type: {tan_type}, ID: {challenge_id}")
-            logger.warning(f"TAN approval required - Method: {tan_type}, Timeout: 300 seconds")
+            logger.warning(f"TAN approval required - Method: {tan_type}, Timeout: 60 seconds")
 
             # Notify that TAN has been requested
             self._invoke_tan_status_callback(
                 "requested",
-                {"tan_type": tan_type, "challenge_id": challenge_id, "timeout_seconds": 300},
+                {"tan_type": tan_type, "challenge_id": challenge_id, "timeout_seconds": 60},
             )
 
             return challenge_id, tan_type, poll_url
@@ -395,13 +395,13 @@ class ComdirectClient:
             tan_type: TAN type (P_TAN_PUSH, P_TAN, M_TAN)
 
         Raises:
-            TANTimeoutError: If TAN approval times out after 300 seconds
+            TANTimeoutError: If TAN approval times out after 60 seconds
         """
         logger.info(f"Step 4: Waiting for TAN approval ({tan_type})")
 
         start_time = time.time()
-        timeout = 300  # 300 seconds timeout
-        poll_interval = 10  # 10 second between polls
+        timeout = 60  # 60 seconds timeout
+        poll_interval = 1  # 1 second between polls
 
         # Notify that TAN approval is pending
         self._invoke_tan_status_callback(
@@ -463,7 +463,7 @@ class ComdirectClient:
         self._invoke_tan_status_callback(
             "timeout", {"tan_type": tan_type, "timeout_seconds": timeout}
         )
-        raise TANTimeoutError("TAN approval timed out after 300 seconds")
+        raise TANTimeoutError("TAN approval timed out after 60 seconds")
 
     async def _step4b_activate_session(
         self, access_token: str, session_uuid: str, challenge_id: str
