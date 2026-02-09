@@ -920,7 +920,7 @@ class ComdirectClient:
         await self._ensure_authenticated()
 
         # Build query parameters with maximum page size
-        params: dict[str, str] = {"paging-count": "500"}
+        params: dict[str, str] = {"paging-count": "100"}
         if transaction_state:
             params["transactionState"] = transaction_state
         if transaction_direction:
